@@ -647,10 +647,9 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
       <div class="success-box">
         <div class="success-icon" data-icon="ok"></div>
         <div class="success-title">問卷已成功送出！</div>
-        <div class="success-sub">感謝您的填寫。<br>測評紀錄已儲存，<br>您可以立即領取個人測評報告。</div>
+        <div class="success-sub">感謝您的填寫，本次測評紀錄已儲存。</div>
         <div class="success-actions">
-          <button class="btn btn-primary btn-qm" onclick="svOpenReport()" style="font-size:16px;padding:14px 28px">🎁 一鍵領取測評報告</button>
-          <button class="btn btn-sec" onclick="svResetAll()">填寫另一份</button>
+          <div style="color:#888;font-size:13px">⏳ 檢查雙方測評狀態…</div>
         </div>
       </div>
       <div id="svPostReport" style="max-width:560px;margin:20px auto 0"></div>
@@ -1124,15 +1123,70 @@ async function svDoSubmit(){
     try{ localStorage.setItem('report_record', JSON.stringify(payload.record)); }catch(e){}
     svRenderPostReport(payload.record);
     svGoScreen(4);
+    svRefreshSuccessActions();      // 動態渲染按鈕：依雙方完成狀態決定顯示
   }catch(e){
     const msg=(e.name==='AbortError') ? '伺服器回應太慢' : e.message;
     if(confirm('送出失敗：'+msg+'\n\n是否仍要顯示測評結果？\n（資料已存在裝置上，可下次重試送出）')){
       try{ localStorage.setItem('report_record', JSON.stringify(payload.record)); }catch(e){}
       svRenderPostReport(payload.record);
       svGoScreen(4);
+      svRefreshSuccessActions();
     } else {
       btn.disabled=false;btn.textContent='確認送出';
     }
+  }
+}
+
+/* 依「孩子 + 家長雙方是否都填完」動態渲染成功畫面下方按鈕 */
+async function svRefreshSuccessActions(){
+  const actions = document.querySelector('#s4 .success-actions');
+  const subEl   = document.querySelector('#s4 .success-sub');
+  if(!actions) return;
+
+  // 載入中 placeholder
+  actions.innerHTML = '<div style="color:#888;font-size:13px">⏳ 檢查雙方測評狀態…</div>';
+
+  let status = { student:false, parent:false, isComplete:false, class:svCls };
+  if(ZW.isDevMode){
+    // dev 模式：依本次填寫角色判斷
+    status = { student: svRole==='student', parent: svRole==='parent', class: svCls };
+    status.isComplete = (svCls==='qm') ? status.parent : (status.student && status.parent);
+  } else {
+    try{
+      const url = SV_URL + '?action=checkBothRoles&name=' + encodeURIComponent(svInfo.name) + '&class=' + encodeURIComponent(svCls);
+      const res = await fetch(url);
+      const json = await res.json();
+      if(json.status === 'ok'){
+        status = json;
+      }
+    }catch(e){
+      console.warn('checkBothRoles 失敗，用本地角色判斷', e);
+      status.student = svRole==='student';
+      status.parent  = svRole==='parent';
+      status.isComplete = (svCls==='qm') ? status.parent : (status.student && status.parent);
+    }
+  }
+
+  if(status.isComplete){
+    if(subEl) subEl.innerHTML = '感謝您的填寫，雙方測評均已完成。<br>您可以立即領取個人測評報告。';
+    actions.innerHTML = `
+      <button class="btn btn-primary btn-${svCls}" onclick="svOpenReport(this)" style="font-size:16px;padding:14px 28px">🎁 一鍵領取測評報告</button>
+      <button class="btn btn-sec" onclick="svResetAll()">填寫另一份</button>
+    `;
+  }else{
+    // 還缺哪一方
+    const missingRole = status.student ? 'parent' : 'student';
+    const missingLabel = missingRole === 'parent' ? '家長' : '學生本人';
+    if(subEl) subEl.innerHTML = '感謝您的填寫，本次測評紀錄已儲存。';
+    actions.innerHTML = `
+      <div style="background:#FFF3E0;border:2px solid #FFCC80;border-radius:12px;padding:16px;color:#E65100;font-size:14px;line-height:1.7;text-align:left;max-width:420px;margin:0 auto">
+        <div style="font-weight:700;margin-bottom:6px;font-size:15px">⏳ 尚未完成雙方測評</div>
+        目前還需要 <strong>${missingLabel}</strong> 完成測評，<br>
+        雙方都填寫完成後才能領取完整測評報告（含交叉分析）。<br>
+        <span style="font-size:12px;opacity:.85">完成後請回到此頁面，或讓另一位家庭成員填寫該角色版本。</span>
+      </div>
+      <button class="btn btn-sec" onclick="svResetAll()" style="margin-top:12px">填寫另一份</button>
+    `;
   }
 }
 
@@ -1241,15 +1295,49 @@ function svResetAll(){
   document.documentElement.style.setProperty('--cls-bg','#f5f5f5');
 }
 
-/* 一鍵領取測評報告：把剛剛送出的紀錄存到 localStorage.report_record，
-   再開啟後台的圖表優化版報告（兩支頁面同 origin，localStorage 互通） */
-function svOpenReport(){
+/* 一鍵領取測評報告：
+   1. 觸發後端寄送雙方交叉分析的 email 到一開始填的 email
+   2. 開啟後台的互動式報告頁，URL 帶 ?name=X&class=Y 讓任何裝置都能載入資料
+*/
+function svOpenReport(btn){
+  // 視覺回饋：寄送中
+  if(btn){ btn.disabled = true; btn.style.opacity = '0.7'; btn.textContent = '📧 寄送中…'; }
+
+  // 1) 同步觸發 email 寄送（fire-and-forget，不擋使用者）
+  if(!ZW.isDevMode){
+    try{
+      fetch(SV_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action:'sendReportEmail', name: svInfo.name, class: svCls }),
+        headers: { 'Content-Type':'text/plain;charset=utf-8' },
+        mode: 'no-cors',
+        keepalive: true
+      });
+    }catch(e){ console.warn('寄信請求發送失敗', e); }
+  } else {
+    console.log('[Dev] 模擬寄送 email 至:', svInfo.email);
+  }
+
+  // 2) 同步把目前紀錄塞 localStorage（同網域分頁可立即讀，不必等網路）
   try{
-    const last=localStorage.getItem('lastSubmitRecord');
+    const last = localStorage.getItem('lastSubmitRecord');
     if(last){ localStorage.setItem('report_record', last); }
   }catch(e){}
-  // 同網域不同 repo path
-  window.open('../lessson-test-Management/測評報告_圖表優化版.html', '_blank');
+
+  // 3) 開啟報告頁，URL 帶 name + class（報告頁會 fetch getRecordPair 拿雙方資料做交叉分析）
+  const url = '../lessson-test-Management/測評報告_圖表優化版.html'
+    + '?name=' + encodeURIComponent(svInfo.name)
+    + '&class=' + encodeURIComponent(svCls);
+  window.open(url, '_blank');
+
+  // 視覺回饋：完成
+  setTimeout(()=>{
+    if(btn){
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.innerHTML = '✓ 已開啟報告（並寄送至 ' + (svInfo.email||'您的信箱') + '）';
+    }
+  }, 1000);
 }
 
 /* ════════════════════════════════════════════════════════════════
