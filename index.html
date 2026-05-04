@@ -903,15 +903,16 @@ async function svProceedFromVerify(){
     nb.className='btn btn-primary btn-'+clsVal;
     document.querySelectorAll('.role-card').forEach(rc=>rc.classList.remove('sel'));
     svRole='';nb.disabled=true;
-    // 預先抓雙方次數，在角色選擇頁就告知鎖定狀態
-    await svPrepareRoleLockUI();
+    // ★ 立即切到角色選擇頁，不等鎖定檢查（避免 Apps Script 冷啟動卡 5-10 秒）
     svGoScreen(1);
+    // 鎖定檢查在背景執行（不 await）；assessment_count=0 視為新學員直接跳過
+    svPrepareRoleLockUI();
   }
 }
 
 /* 在進入角色選擇頁前，先抓雙方次數，標示鎖定的角色卡片 */
 async function svPrepareRoleLockUI(){
-  // 重置卡片狀態
+  // 重置卡片狀態（預設都解鎖）
   ['student','parent'].forEach(r=>{
     const card=document.getElementById('roleCard_'+r);
     const lock=document.getElementById('roleLock_'+r);
@@ -923,8 +924,15 @@ async function svPrepareRoleLockUI(){
   const banner=document.getElementById('roleLockBanner');
   if(banner){ banner.style.display='none'; banner.innerHTML=''; }
 
-  // dev 模式跳過後端檢查
+  // ★ 短路 1：dev 模式不檢查
   if(ZW.isDevMode) return;
+
+  // ★ 短路 2：assessment_count=0 → 全新學員，必定不會被鎖，直接跳過後端檢查
+  // （學員名冊裡沒有任何測評紀錄就不可能有次數差異）
+  const ac = svVerifiedRecord ? Number(svVerifiedRecord.assessment_count||0) : 0;
+  if(ac === 0){
+    return;
+  }
 
   let counts={student:0,parent:0};
   try{
@@ -936,6 +944,9 @@ async function svPrepareRoleLockUI(){
       counts.parent  = json.parentCount ||0;
     }
   }catch(e){ console.warn('checkBothRoles 失敗', e); return; }
+
+  // ★ 短路 3：雙方都 0 → 沒任何紀錄，不需鎖定
+  if(counts.student === 0 && counts.parent === 0) return;
 
   const sCnt=counts.student, pCnt=counts.parent;
 
@@ -1033,11 +1044,18 @@ function svGoFromRole(){
    - ZY/KZ 若已超前對方則 LOCK，顯示 sLock 畫面
 */
 async function svGateAndStartForm(){
-  // QM 直接進（dev mode 也直接進，省去 fetch）
+  // QM / dev 模式直接進
   if(svCls==='qm' || ZW.isDevMode){
     svStartForm();
     return;
   }
+  // ★ 短路：assessment_count=0 → 全新學員，第一次測評必定 unlocked，跳過後端檢查
+  const ac = svVerifiedRecord ? Number(svVerifiedRecord.assessment_count||0) : 0;
+  if(ac === 0){
+    svStartForm();
+    return;
+  }
+
   // 顯示載入提示
   const oldNext=document.getElementById('roleNextBtn');
   if(oldNext){ oldNext.disabled=true; oldNext.textContent='檢查測評輪次中…'; }
