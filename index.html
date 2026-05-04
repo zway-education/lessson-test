@@ -1087,30 +1087,60 @@ async function svDoSubmit(){
     parent_name:svInfo.pname,phone:svInfo.phone,email:svInfo.email,
     ...svAnswers
   }};
+  // 先暫存到 localStorage，萬一網路斷可恢復
+  try{ localStorage.setItem('lastSubmitRecord', JSON.stringify(payload.record)); }catch(e){}
   try{
     if(ZW.isDevMode){
       console.log('[Dev] Payload:',payload.record);
       await new Promise(r=>setTimeout(r,800));
     } else {
-      // 必須用 text/plain，避免 application/json 觸發 CORS preflight
-      // Apps Script doPost 透過 e.postData.contents 收到 JSON 字串，再 JSON.parse
-      // ?action=saveResponse 同步加在 URL，雙保險（doGet/doPost 都能讀到）
-      const res=await fetch(SV_URL+'?action=saveResponse',{
-        method:'POST',
-        body:JSON.stringify(payload),
-        headers:{'Content-Type':'text/plain;charset=utf-8'},
-        redirect:'follow'
-      });
-      const json=await res.json().catch(()=>({status:'error',message:'回應非 JSON'}));
-      if(json.status!=='ok') throw new Error(json.message||'後台未回 ok');
+      // 25 秒 timeout 避免 Apps Script 冷啟動把使用者卡住
+      const ctrl=new AbortController();
+      const tid=setTimeout(()=>ctrl.abort(), 25000);
+      let networkOk=false;
+      try{
+        const res=await fetch(SV_URL+'?action=saveResponse',{
+          method:'POST',
+          body:JSON.stringify(payload),
+          headers:{'Content-Type':'text/plain;charset=utf-8'},
+          redirect:'follow',
+          signal:ctrl.signal
+        });
+        clearTimeout(tid);
+        const json=await res.json().catch(()=>({status:'error',message:'回應非 JSON'}));
+        if(json.status==='ok') networkOk=true;
+        else throw new Error(json.message||'後台未回 ok');
+      }catch(err){
+        clearTimeout(tid);
+        // Timeout 或網路問題：fire-and-forget 補送（不等回應）
+        if(err.name==='AbortError' || /timeout|fetch|Failed/i.test(err.message)){
+          try{
+            fetch(SV_URL+'?action=saveResponse',{
+              method:'POST',
+              body:JSON.stringify(payload),
+              headers:{'Content-Type':'text/plain;charset=utf-8'},
+              mode:'no-cors',
+              keepalive:true
+            }).catch(()=>{});
+            console.warn('Submit timeout, retrying as fire-and-forget. Backup in localStorage.lastSubmitRecord');
+            networkOk=true;
+          }catch(e){}
+        }
+        if(!networkOk) throw err;
+      }
     }
-    // 送出後渲染報告區塊（success 畫面內）
     try{ localStorage.setItem('report_record', JSON.stringify(payload.record)); }catch(e){}
     svRenderPostReport(payload.record);
     svGoScreen(4);
   }catch(e){
-    alert('送出失敗，請稍後再試。\n'+e.message);
-    btn.disabled=false;btn.textContent='確認送出';
+    const msg=(e.name==='AbortError') ? '伺服器回應太慢' : e.message;
+    if(confirm('送出失敗：'+msg+'\n\n是否仍要顯示測評結果？\n（資料已存在裝置上，可下次重試送出）')){
+      try{ localStorage.setItem('report_record', JSON.stringify(payload.record)); }catch(e){}
+      svRenderPostReport(payload.record);
+      svGoScreen(4);
+    } else {
+      btn.disabled=false;btn.textContent='確認送出';
+    }
   }
 }
 
