@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>展威文化教育 — 測評系統</title>
+<title>學習測評問卷｜展威文化教育</title>
 <script>
 const ZW = {
   APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbxQNjBnZnw90piQd4k55MGUoRJQG9Gn0gsj_6XkMZHVuOyvb-b3JQz3uLFxpmId6WD9Zw/exec',
@@ -387,19 +387,61 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
 .rp-chart-card{background:#fff;border-radius:14px;padding:18px;margin-bottom:12px;
   box-shadow:0 1px 6px rgba(0,0,0,.06)}
 .rp-chart-label{font-size:13px;font-weight:700;margin-bottom:12px;color:#1F2937}
-.rp-dim-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.rp-dim-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 .rp-dim-card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.06)}
 .rp-dim-name{font-size:12px;font-weight:700;color:#555;margin-bottom:10px}
 .rp-dim-avg{font-size:22px;font-weight:700;float:right;line-height:1}
 .rp-dim-track{height:8px;background:#F3F4F6;border-radius:4px;overflow:hidden;margin-top:6px}
-.rp-dim-fill{height:100%;border-radius:4px}
+.rp-dim-fill{height:100%;border-radius:4px;transition:width .6s ease}
+/* — Test Mode — */
+.test-bar{position:fixed;bottom:72px;right:16px;z-index:200;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.test-bar.hidden{display:none}
+.btn-test{background:rgba(30,30,30,.88);color:#FFD600;border:1.5px solid #FFD600;border-radius:20px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)}
+.btn-test:hover{background:#FFD600;color:#000}
+.btn-quick-test{background:rgba(30,30,30,.88);color:#aaa;border:1px solid #555;border-radius:20px;padding:6px 14px;font-size:11px;cursor:pointer;font-family:inherit;backdrop-filter:blur(4px)}
+.btn-quick-test:hover{border-color:#FFD600;color:#FFD600}
+/* — Summary stats / highlights — */
+.rp-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+@media(max-width:680px){.rp-summary{grid-template-columns:repeat(2,1fr)}}
+.rp-stat{background:#fff;border-radius:12px;padding:14px;text-align:center;box-shadow:0 1px 6px rgba(0,0,0,.06)}
+.rp-stat-label{font-size:11px;color:#6B7280;font-weight:600;letter-spacing:.5px}
+.rp-stat-value{font-size:24px;font-weight:800;margin-top:6px;line-height:1}
+.rp-stat-sub{font-size:11px;color:#9CA3AF;margin-top:4px}
+.rp-highlight{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+@media(max-width:680px){.rp-highlight{grid-template-columns:1fr}}
+.rp-hl-card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 1px 6px rgba(0,0,0,.06);border-left:4px solid #ddd}
+.rp-hl-card.strong{border-left-color:#22C55E}
+.rp-hl-card.weak{border-left-color:#F59E0B}
+.rp-hl-title{font-size:12px;font-weight:700;color:#6B7280;display:flex;align-items:center;gap:6px;margin-bottom:8px}
+.rp-hl-list{list-style:none;padding:0;margin:0}
+.rp-hl-list li{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;border-bottom:1px dashed #F3F4F6}
+.rp-hl-list li:last-child{border-bottom:none}
+.rp-hl-name{font-weight:700;color:#1F2937}
+.rp-hl-score{font-weight:800;font-variant-numeric:tabular-nums}
+/* — Two-col chart row — */
+.rp-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+@media(max-width:680px){.rp-row-2{grid-template-columns:1fr}}
+/* — Question detail accordion — */
+.rp-q-acc{margin-top:10px;border-top:1px dashed #E5E7EB;padding-top:8px}
+.rp-q-acc summary{cursor:pointer;font-size:11px;color:#6B7280;font-weight:600;list-style:none;outline:none}
+.rp-q-acc summary::-webkit-details-marker{display:none}
+.rp-q-acc summary::before{content:'▸ ';color:#9CA3AF}
+.rp-q-acc[open] summary::before{content:'▾ '}
+.rp-q-line{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:#555;padding:3px 0}
+.rp-q-bar{flex:1;height:5px;background:#F3F4F6;border-radius:3px;margin:0 8px;overflow:hidden}
+.rp-q-fill{height:100%;border-radius:3px}
 @media print{
   .g-nav,.rp-back{display:none!important}
-  #page-report{padding-top:0!important}
+  #page-report{padding-top:0!important;background:#fff!important}
   .rp-back{display:none!important}
   .page{display:block!important}
   #page-survey,#page-admin{display:none!important}
+  .rp-stat,.rp-hl-card,.rp-chart-card,.rp-info-card,.rp-dim-card{box-shadow:none!important;border:1px solid #ddd!important;break-inside:avoid}
+  .rp-dim-grid{break-inside:avoid}
 }
+
+#nav-admin,#nav-report,#page-admin,#page-report{display:none!important}
+@media print{ #page-survey{display:block!important} }
 </style>
 </head>
 <body>
@@ -410,12 +452,7 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
     <button class="g-tab active" id="nav-survey" onclick="showPage('survey')">
       ✏️ 填寫問卷
     </button>
-    <button class="g-tab" id="nav-admin" onclick="showPage('admin')">
-      📊 資料管理
-    </button>
-    <button class="g-tab" id="nav-report" onclick="showPage('report')">
-      📋 測評報告
-    </button>
+    <a href="https://zway-education.github.io/lessson-test-Management/" id="adminLink" target="_blank" style="display:flex;align-items:center;gap:5px;color:#9CA3AF;font-size:11px;text-decoration:none;margin-left:auto;padding:0 12px;opacity:.6" title="管理員入口">🔒 後台</a>
   </div>
 </nav>
 
@@ -423,6 +460,11 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
      SURVEY PAGE
 ══════════════════════════════════════════════════════════════ -->
 <div id="page-survey" class="page on">
+  <!-- 測試工具列（只在填寫畫面顯示） -->
+  <div class="test-bar hidden" id="svTestBar">
+    <button class="btn-test" onclick="svTestFillAll()">⚡ 一鍵填完所有題目</button>
+    <button class="btn-quick-test" onclick="svTestFillStep()">→ 填完本頁</button>
+  </div>
   <!-- progress bar sticky bar -->
   <div class="sv-topbar">
     <div class="prog-wrap" id="progWrap" style="display:none">
@@ -462,6 +504,11 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
         <div style="margin-top:18px">
           <button class="btn-verify" id="vSearchBtn" onclick="svDoLookup()">
             <span>🔍</span><span>查詢學員資料</span>
+          </button>
+        </div>
+        <div style="margin-top:12px">
+          <button class="btn-quick-test" style="width:100%;justify-content:center;padding:9px" onclick="svQuickTestEntry()">
+            ⚡ 測試模式（跳過驗證直接進入）
           </button>
         </div>
       </div>
@@ -553,9 +600,10 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
         <div class="success-sub">感謝您的填寫。<br>測評紀錄已儲存，<br>老師將在彙整後產出報告。</div>
         <div class="success-actions">
           <button class="btn btn-primary btn-qm" onclick="svResetAll()">填寫另一份</button>
-          <button class="btn btn-sec" onclick="showPage('admin')">前往資料管理 →</button>
+          
         </div>
       </div>
+      <div id="svPostReport" style="max-width:560px;margin:20px auto 0"></div>
     </div>
   </div>
 </div><!-- /page-survey -->
@@ -620,7 +668,8 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
       </div>
       <div class="dp-body" id="dpBody"></div>
       <div class="dp-actions">
-        <button class="btn-report" onclick="amOpenReport()">📋 開啟此份報告</button>
+        <button class="btn-report" onclick="amOpenRichReport()">📋 開啟完整報告（富版）</button>
+        <button class="btn-report" style="background:#555" onclick="amOpenReport()">簡版預覽</button>
         <button class="btn-close-panel" onclick="amClosePanel()">關閉</button>
       </div>
     </div>
@@ -993,13 +1042,50 @@ async function svDoSubmit(){
       console.log('[Dev] Payload:',payload.record);
       await new Promise(r=>setTimeout(r,800));
     } else {
-      await fetch(SV_URL,{method:'POST',body:JSON.stringify(payload),headers:{'Content-Type':'application/json'}});
+      // ⚠️ 必須用 text/plain，避免 application/json 觸發 CORS preflight
+      // Apps Script doPost 透過 e.postData.contents 收到 JSON 字串，再 JSON.parse
+      // ?action=saveResponse 同步加在 URL，雙保險（doGet/doPost 都能讀到）
+      const res=await fetch(SV_URL+'?action=saveResponse',{
+        method:'POST',
+        body:JSON.stringify(payload),
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        redirect:'follow'
+      });
+      const json=await res.json().catch(()=>({status:'error',message:'回應非 JSON'}));
+      if(json.status!=='ok') throw new Error(json.message||'後台未回 ok');
     }
+    // 送出後渲染報告區塊（success 畫面內）
+    try{ localStorage.setItem('report_record', JSON.stringify(payload.record)); }catch(e){}
+    svRenderPostReport(payload.record);
     svGoScreen(4);
   }catch(e){
     alert('送出失敗，請稍後再試。\n'+e.message);
     btn.disabled=false;btn.textContent='確認送出 ✓';
   }
+}
+
+/* 送出後在 success 畫面下方繪製簡版報告 */
+function svRenderPostReport(rec){
+  const box=document.getElementById('svPostReport'); if(!box) return;
+  const dims=ZW.calcDims({...rec, vals:undefined})||[];
+  // 補回 vals（calcDims 在 ZW 上沒帶 vals）
+  const labels=ZW.dimLabels[rec.qKey]||[];
+  const dimsFull=[];
+  for(let s=1;s<labels.length;s++){
+    const vals=[]; for(let q=0;q<50;q++){ const v=rec[`${rec.qKey}_s${s}_q${q}`]; if(v===undefined) break; vals.push(Number(v)); }
+    if(vals.length){ const avg=vals.reduce((a,b)=>a+b,0)/vals.length; dimsFull.push({label:labels[s],avg,count:vals.length,vals}); }
+  }
+  const color=ZW.color[rec.class]||'#555';
+  if(!dimsFull.length){ box.innerHTML=''; return; }
+  box.innerHTML=`<div style="background:#fff;border-radius:14px;padding:18px;margin-top:14px;box-shadow:0 1px 6px rgba(0,0,0,.06)">
+    <div style="font-weight:700;font-size:14px;margin-bottom:12px">📋 您的測評結果</div>
+    ${dimsFull.map(d=>`<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+        <span>${d.label}</span><span style="color:${color};font-weight:700">${d.avg.toFixed(2)} / 5</span>
+      </div>
+      <div style="height:7px;background:#F3F4F6;border-radius:4px;overflow:hidden">
+        <div style="width:${d.avg/5*100}%;height:100%;background:${color}"></div></div></div>`).join('')}
+  </div>`;
 }
 function svGoScreen(n){
   document.querySelectorAll('.sv-screen').forEach((s,i)=>s.classList.toggle('on',i===n));
@@ -1007,6 +1093,67 @@ function svGoScreen(n){
   document.getElementById('progWrap').style.display=inForm?'':'none';
   document.getElementById('stepNav').classList.toggle('on',n===2);
   if(n!==2) document.getElementById('stepNavInner').innerHTML='';
+  // Show test bar only on form steps (2/3); hide on verify/select/success
+  const tb=document.getElementById('svTestBar');
+  if(tb) tb.classList.toggle('hidden', !(n===2||n===3));
+}
+
+/* ════════════════════════════════════════════════════════════════
+   TEST MODE — quickly skip verify and auto-fill answers
+════════════════════════════════════════════════════════════════ */
+async function svQuickTestEntry(){
+  const cls=prompt('班別代碼（qm / kz / zy）：','zy');
+  if(!cls||!['qm','kz','zy'].includes(cls)){ alert('班別代碼必須是 qm / kz / zy'); return; }
+  const role=cls==='qm' ? 'parent' : prompt('角色（student / parent）：','student');
+  if(cls!=='qm' && !['student','parent'].includes(role)){ alert('角色必須是 student / parent'); return; }
+  // Fake verified record
+  svVerifiedRecord={name:'測試生',class:cls,class_name:'（測試班級）',
+    parent_name:'測試家長',phone:'',email:'',level:'Test',
+    assessment_count:0,nextAssessment:1};
+  svCls=cls; svRole=role; svQKey=cls+'_'+role; svSteps=ZW.stepDef[svQKey]||[];
+  svApplyTheme();
+  // Need questions cached
+  await svGetQuestions(svQKey);
+  // Pre-fill basic info with test data
+  svInfo={name:'測試生',grade:'測試班級',date:new Date().toISOString().slice(0,10),
+    filldate:new Date().toISOString().slice(0,10),pname:'測試家長',
+    phone:'0900-000-000',email:'test@example.com',school:'測試學校',ename:'Test',prel:'母'};
+  svCurStep=0; svAnswers={};
+  document.getElementById('progWrap').style.display='';
+  svUpdateProgress();
+  svRenderStep();
+  document.getElementById('sVerify').style.display='none';
+  svGoScreen(2);
+}
+
+/* 隨機填 3-5 分 */
+function _svRand(){ return 3+Math.floor(Math.random()*3); }
+
+function svTestFillStep(){
+  const step=svSteps[svCurStep]; if(!step) return;
+  if(step.type==='info'){
+    // info already pre-filled in svInfo; just advance
+    svNextStep(); return;
+  }
+  const qs=svGetStepQ(svQKey, step.stepIdx);
+  qs.forEach(q=>{ svAnswers[q.key]=_svRand(); });
+  svNextStep();
+}
+
+function svTestFillAll(){
+  // fill all remaining steps
+  let safety=20;
+  while(svCurStep < svSteps.length && safety-- > 0){
+    const step=svSteps[svCurStep];
+    if(step.type==='info'){
+      svNextStep();
+    } else {
+      const qs=svGetStepQ(svQKey, step.stepIdx);
+      qs.forEach(q=>{ svAnswers[q.key]=_svRand(); });
+      svNextStep();
+    }
+  }
+  // Should be on confirm screen now
 }
 function svResetAll(){
   svCls='';svRole='';svQKey='';svSteps=[];svCurStep=0;svAnswers={};svInfo={};svVerifiedRecord=null;
@@ -1190,7 +1337,7 @@ function amSelectRecord(idx){
   document.getElementById('detailPanel').classList.add('open');
   document.querySelectorAll('.rec-table tbody tr').forEach((tr,i)=>tr.classList.toggle('selected',i===idx));
 }
-function amQuickReport(idx){amSelected=amFiltered[idx];amOpenReport();}
+function amQuickReport(idx){amSelected=amFiltered[idx];amOpenRichReport();}
 function amClosePanel(){
   document.getElementById('detailPanel').classList.remove('open');
   amSelected=null;
@@ -1223,8 +1370,17 @@ function amRenderDetail(rec){
 }
 function amOpenReport(){
   if(!amSelected) return;
+  // 同步寫到 localStorage 給 測評報告_圖表優化版.html 讀
+  try{ localStorage.setItem('report_record', JSON.stringify(amSelected)); }catch(e){}
+  // 先在內嵌 report 頁渲染我們自己的版本
   rpRenderReport(amSelected);
   showPage('report');
+}
+function amOpenRichReport(){
+  if(!amSelected) return;
+  try{ localStorage.setItem('report_record', JSON.stringify(amSelected)); }catch(e){}
+  // 開啟富版報告（同資料夾的 測評報告_圖表優化版.html）
+  window.open('測評報告_圖表優化版.html', '_blank');
 }
 function amShowLoading(){
   document.getElementById('tableContainer').innerHTML='<div class="state-msg"><div class="spinner"></div><p style="margin-top:12px">載入資料中…</p></div>';
@@ -1245,9 +1401,22 @@ function rpHex2rgba(hex,a){
   return `rgba(${r},${g},${b},${a})`;
 }
 
+/* 依維度名稱挑最適合的圖表類型 */
+function rpPickChartType(label){
+  const s=String(label||'');
+  if(/多元智能|RIASEC|職業/.test(s)) return 'radar';
+  if(/ASK/.test(s))                   return 'polarArea';
+  if(/4C|素養/.test(s))               return 'radar';
+  if(/覺知五力|大腦五力/.test(s))     return 'radar';
+  if(/教養/.test(s))                  return 'bar';
+  if(/左右腦/.test(s))                return 'doughnut';
+  return 'bar';
+}
+
 function rpRenderReport(rec){
   rpDestroyCharts();
   const color=ZW.color[rec.class]||'#555';
+  const colorDark=ZW.colorDark?.[rec.class]||color;
   const bg=ZW.bgColor[rec.class]||'#f5f5f5';
   const dims=amCalcDims(rec);
   // update back bar
@@ -1261,7 +1430,7 @@ function rpRenderReport(rec){
     <div class="rp-info-badge" style="background:${bg}">${clsIcon[rec.class]||'📋'}</div>
     <div class="rp-info-main">
       <div class="rp-info-name">${amEsc(rec.name||'—')}</div>
-      <div class="rp-info-meta">${amEsc(rec.class_name||'')} · ${amEsc(rec.parent_name||'')} · 評量日期 ${amEsc(rec.eval_date||'—')}</div>
+      <div class="rp-info-meta">${amEsc(rec.class_name||'')} ${rec.parent_name?'· 家長 '+amEsc(rec.parent_name):''} · 評量日期 ${amEsc(rec.eval_date||'—')}</div>
       <div class="rp-info-tags">
         <span class="rp-tag" style="background:${bg};color:${color}">${ZW.clsLabel[rec.class]||''}</span>
         <span class="rp-tag" style="background:#F3F4F6;color:#555">${ZW.roleLabel[rec.role]||''}</span>
@@ -1275,81 +1444,139 @@ function rpRenderReport(rec){
     document.getElementById('rpWrap').innerHTML=html;return;
   }
 
-  // ── Overview radar ─────────────────────────────────────────────
+  // ── 整體統計 4 卡 ────────────────────────────────────────────────
+  const totalQ=dims.reduce((s,d)=>s+d.count,0);
+  const overall=dims.reduce((s,d)=>s+d.avg*d.count,0)/totalQ;
+  const sortedAsc=[...dims].sort((a,b)=>a.avg-b.avg);
+  const sortedDesc=[...dims].sort((a,b)=>b.avg-a.avg);
+  const top=sortedDesc[0], low=sortedAsc[0];
+  html+=`<div class="rp-summary">
+    <div class="rp-stat"><div class="rp-stat-label">整體平均</div>
+      <div class="rp-stat-value" style="color:${color}">${overall.toFixed(2)}</div>
+      <div class="rp-stat-sub">滿分 5.00</div></div>
+    <div class="rp-stat"><div class="rp-stat-label">維度數量</div>
+      <div class="rp-stat-value">${dims.length}</div>
+      <div class="rp-stat-sub">共 ${totalQ} 題</div></div>
+    <div class="rp-stat"><div class="rp-stat-label">最高維度</div>
+      <div class="rp-stat-value" style="color:#22C55E;font-size:18px">${amEsc(top.label)}</div>
+      <div class="rp-stat-sub">${top.avg.toFixed(2)} / 5</div></div>
+    <div class="rp-stat"><div class="rp-stat-label">待加強維度</div>
+      <div class="rp-stat-value" style="color:#F59E0B;font-size:18px">${amEsc(low.label)}</div>
+      <div class="rp-stat-sub">${low.avg.toFixed(2)} / 5</div></div>
+  </div>`;
+
+  // ── 強項 / 待加強 並排 ────────────────────────────────────────
+  const strongs=sortedDesc.slice(0,Math.min(3,dims.length));
+  const weaks  =sortedAsc.slice(0, Math.min(3,dims.length));
+  html+=`<div class="rp-highlight">
+    <div class="rp-hl-card strong">
+      <div class="rp-hl-title">⭐ 顯著強項 Top ${strongs.length}</div>
+      <ul class="rp-hl-list">
+        ${strongs.map(d=>`<li><span class="rp-hl-name">${amEsc(d.label)}</span>
+          <span class="rp-hl-score" style="color:#22C55E">${d.avg.toFixed(2)}</span></li>`).join('')}
+      </ul>
+    </div>
+    <div class="rp-hl-card weak">
+      <div class="rp-hl-title">🔧 建議加強 Top ${weaks.length}</div>
+      <ul class="rp-hl-list">
+        ${weaks.map(d=>`<li><span class="rp-hl-name">${amEsc(d.label)}</span>
+          <span class="rp-hl-score" style="color:#F59E0B">${d.avg.toFixed(2)}</span></li>`).join('')}
+      </ul>
+    </div>
+  </div>`;
+
+  // ── 總覽雷達圖 ─────────────────────────────────────────────────
   html+=`<div class="rp-section-title">總覽雷達圖</div>
   <div class="rp-chart-card">
     <div class="rp-chart-label">${amEsc(rec.name)} · 各維度平均分數（滿分 5）</div>
-    <div style="max-width:400px;margin:0 auto"><canvas id="rpRadar"></canvas></div>
+    <div style="max-width:420px;margin:0 auto"><canvas id="rpRadar"></canvas></div>
   </div>`;
 
-  // ── Dimension cards ────────────────────────────────────────────
+  // ── 各維度詳細卡 ────────────────────────────────────────────────
   html+='<div class="rp-section-title">各維度詳細分數</div><div class="rp-dim-grid">';
   dims.forEach((d,i)=>{
     const pct=Math.round(d.avg/5*100);
+    const ct=rpPickChartType(d.label);
+    const qDetail=d.vals.map((v,j)=>`<div class="rp-q-line">
+        <span style="min-width:30px">Q${j+1}</span>
+        <div class="rp-q-bar"><div class="rp-q-fill" style="width:${v/5*100}%;background:${color}"></div></div>
+        <span style="min-width:24px;text-align:right;color:${color};font-weight:700">${v}</span>
+      </div>`).join('');
     html+=`<div class="rp-dim-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div class="rp-dim-name">${amEsc(d.label)}</div>
         <div class="rp-dim-avg" style="color:${color}">${d.avg.toFixed(1)}</div>
       </div>
       <div class="rp-dim-track"><div class="rp-dim-fill" style="width:${pct}%;background:${color}"></div></div>
-      <div style="font-size:10px;color:#9CA3AF;margin-top:4px">${d.count} 題 · 平均 ${d.avg.toFixed(2)} / 5.00</div>
-      <canvas id="rpDim${i}" style="margin-top:10px;max-height:120px"></canvas>
+      <div style="font-size:10px;color:#9CA3AF;margin-top:4px">${d.count} 題 · 平均 ${d.avg.toFixed(2)} / 5.00 · 圖型：${ct}</div>
+      <canvas id="rpDim${i}" data-ct="${ct}" style="margin-top:10px;max-height:160px"></canvas>
+      <details class="rp-q-acc"><summary>查看每題分數</summary>${qDetail}</details>
     </div>`;
   });
   html+='</div>';
 
   document.getElementById('rpWrap').innerHTML=html;
 
-  // ── Draw radar ─────────────────────────────────────────────────
-  requestAnimationFrame(()=>{
+  requestAnimationFrame(function(){
     const radarCtx=document.getElementById('rpRadar').getContext('2d');
     rpCharts.push(new Chart(radarCtx,{
       type:'radar',
-      data:{
-        labels:dims.map(d=>d.label),
-        datasets:[{
-          label:rec.name,
-          data:dims.map(d=>d.avg),
-          backgroundColor:rpHex2rgba(color,0.15),
-          borderColor:color,
-          borderWidth:2,
-          pointBackgroundColor:color,
-          pointRadius:4
-        }]
-      },
-      options:{responsive:true,scales:{r:{min:0,max:5,ticks:{stepSize:1,font:{size:9}},
-        pointLabels:{font:{size:11}}}},plugins:{legend:{display:false}}}
+      data:{labels:dims.map(function(d){return d.label;}),
+        datasets:[{label:rec.name,data:dims.map(function(d){return d.avg;}),
+          backgroundColor:rpHex2rgba(color,0.18),borderColor:color,
+          borderWidth:2,pointBackgroundColor:color,pointRadius:4}]},
+      options:{responsive:true,
+        scales:{r:{min:0,max:5,ticks:{stepSize:1,font:{size:9}},
+          pointLabels:{font:{size:11}}}},
+        plugins:{legend:{display:false}}}
     }));
 
-    // ── Draw per-dim bar charts ─────────────────────────────────
-    dims.forEach((d,i)=>{
-      const ctx=document.getElementById(`rpDim${i}`)?.getContext('2d');
-      if(!ctx) return;
-      const labels=d.vals.map((_,j)=>`Q${j+1}`);
-      rpCharts.push(new Chart(ctx,{
-        type:'bar',
-        data:{
-          labels,
-          datasets:[{
-            data:d.vals,
-            backgroundColor:rpHex2rgba(color,0.7),
-            borderColor:color,
-            borderWidth:1,
-            borderRadius:3
-          }]
-        },
-        options:{responsive:true,plugins:{legend:{display:false}},
-          scales:{y:{min:0,max:5,ticks:{stepSize:1,font:{size:9}}},
-                  x:{ticks:{font:{size:9}}}}}
-      }));
+    dims.forEach(function(d,i){
+      const cv=document.getElementById('rpDim'+i); if(!cv) return;
+      const ctx=cv.getContext('2d');
+      const ct=cv.dataset.ct||'bar';
+      const labels=d.vals.map(function(_,j){return 'Q'+(j+1);});
+
+      if(ct==='radar'){
+        rpCharts.push(new Chart(ctx,{type:'radar',
+          data:{labels:labels,datasets:[{data:d.vals,
+            backgroundColor:rpHex2rgba(color,0.18),borderColor:color,
+            borderWidth:1.5,pointBackgroundColor:color,pointRadius:2}]},
+          options:{responsive:true,plugins:{legend:{display:false}},
+            scales:{r:{min:0,max:5,ticks:{display:false},
+              pointLabels:{font:{size:8},color:'#888'}}}}}));
+      } else if(ct==='polarArea'){
+        rpCharts.push(new Chart(ctx,{type:'polarArea',
+          data:{labels:labels,datasets:[{data:d.vals,
+            backgroundColor:d.vals.map(function(_,j){return rpHex2rgba(color,0.25+j*0.06);}),
+            borderColor:color,borderWidth:1}]},
+          options:{responsive:true,plugins:{legend:{display:false}},
+            scales:{r:{min:0,max:5,ticks:{display:false}}}}}));
+      } else if(ct==='doughnut'){
+        const a=d.vals[0]||0, b=d.vals[1]||0, sum=(a+b)||1;
+        rpCharts.push(new Chart(ctx,{type:'doughnut',
+          data:{labels:['L','R'],datasets:[{data:[a,b],
+            backgroundColor:[rpHex2rgba(color,0.85), rpHex2rgba(colorDark,0.45)],
+            borderWidth:0}]},
+          options:{responsive:true,cutout:'62%',
+            plugins:{legend:{position:'bottom',labels:{font:{size:10}}},
+              tooltip:{callbacks:{label:function(c){return c.label+'：'+c.raw+' ('+Math.round(c.raw/sum*100)+'%)';}}}}}}));
+      } else {
+        rpCharts.push(new Chart(ctx,{type:'bar',
+          data:{labels:labels,datasets:[{data:d.vals,
+            backgroundColor:rpHex2rgba(color,0.7),borderColor:color,
+            borderWidth:1,borderRadius:3}]},
+          options:{responsive:true,plugins:{legend:{display:false}},
+            scales:{y:{min:0,max:5,ticks:{stepSize:1,font:{size:9}}},
+              x:{ticks:{font:{size:9}}}}}}));
+      }
     });
   });
 }
 
-/* ── Init ─────────────────────────────────────────────────────── */
-window.addEventListener('load',()=>{
+window.addEventListener('load',function(){
   document.getElementById('sVerify').style.display='block';
-  document.querySelectorAll('.sv-screen').forEach(s=>s.classList.remove('on'));
+  document.querySelectorAll('.sv-screen').forEach(function(s){s.classList.remove('on');});
 });
 </script>
 </body>
