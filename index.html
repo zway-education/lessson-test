@@ -626,6 +626,21 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
     </div>
   </div>
 
+  <!-- sLock: 輪次鎖定 -->
+  <div class="sv-screen" id="sLock">
+    <div class="sv-cont" style="display:flex;align-items:center;justify-content:center;min-height:60vh">
+      <div style="max-width:500px;width:100%;background:#fff;border-radius:18px;padding:32px;box-shadow:0 4px 28px rgba(0,0,0,.1);text-align:center">
+        <div style="font-size:64px;margin-bottom:8px">🔒</div>
+        <div style="font-size:20px;font-weight:900;color:#D32F2F;margin-bottom:8px">本輪測評已鎖定</div>
+        <div id="lockReason" style="font-size:14px;color:#555;line-height:1.7;background:#FFF3E0;border-left:4px solid #FF9800;padding:14px 16px;border-radius:8px;margin:16px 0;text-align:left"></div>
+        <div id="lockProgress" style="font-size:12px;color:#888;margin-bottom:20px"></div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <button class="btn btn-sec" onclick="svResetAll()">返回首頁</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- s3: 確認 -->
   <div class="sv-screen" id="s3">
     <div class="sv-cont">
@@ -871,8 +886,10 @@ async function svProceedFromVerify(){
   const roles=clsVal==='qm'?['parent']:['student','parent'];
   await Promise.all(roles.map(r=>svGetQuestions(`${clsVal}_${r}`)));
   document.getElementById('sVerify').style.display='none';
-  if(clsVal==='qm'){svRole='parent';svQKey='qm_parent';svSteps=STEP_DEF[svQKey];svStartForm();}
-  else{
+  if(clsVal==='qm'){
+    svRole='parent';svQKey='qm_parent';svSteps=STEP_DEF[svQKey];
+    svGateAndStartForm();   // qm 也走鎖定檢查（會直接放行）
+  } else {
     document.getElementById('r1Cls').textContent=CLS_LABEL[clsVal];
     const nb=document.getElementById('roleNextBtn');
     nb.className='btn btn-primary btn-'+clsVal;
@@ -889,8 +906,10 @@ function svApplyTheme(){
 
 function svSelectClass(c){
   svCls=c;svApplyTheme();
-  if(c==='qm'){svRole='parent';svQKey='qm_parent';svSteps=STEP_DEF[svQKey];svStartForm();}
-  else{
+  if(c==='qm'){
+    svRole='parent';svQKey='qm_parent';svSteps=STEP_DEF[svQKey];
+    svGateAndStartForm();
+  } else {
     document.getElementById('r1Cls').textContent=CLS_LABEL[c];
     const nb=document.getElementById('roleNextBtn');
     nb.className='btn btn-primary btn-'+c;
@@ -906,7 +925,69 @@ function svSelectRole(r){
 }
 function svGoFromRole(){
   if(!svRole) return;
-  svQKey=svCls+'_'+svRole;svSteps=STEP_DEF[svQKey];svStartForm();
+  svQKey=svCls+'_'+svRole;svSteps=STEP_DEF[svQKey];
+  svGateAndStartForm();   // 走鎖定檢查
+}
+
+/* ★ 統一閘門：依輪次鎖定狀態決定能否進入填寫
+   - QM 班永遠 unlocked（後端會直接放行）
+   - ZY/KZ 若已超前對方則 LOCK，顯示 sLock 畫面
+*/
+async function svGateAndStartForm(){
+  // QM 直接進（dev mode 也直接進，省去 fetch）
+  if(svCls==='qm' || ZW.isDevMode){
+    svStartForm();
+    return;
+  }
+  // 顯示載入提示
+  const oldNext=document.getElementById('roleNextBtn');
+  if(oldNext){ oldNext.disabled=true; oldNext.textContent='檢查測評輪次中…'; }
+
+  let lock=null;
+  try{
+    const url=SV_URL+'?action=checkRoundLock'+
+      '&name='+encodeURIComponent(svInfo.name)+
+      '&class='+encodeURIComponent(svCls)+
+      '&role='+encodeURIComponent(svRole);
+    const res=await fetch(url);
+    const json=await res.json();
+    if(json.status==='ok') lock=json;
+  }catch(e){
+    console.warn('checkRoundLock 失敗，預設放行', e);
+  } finally {
+    if(oldNext){ oldNext.disabled=false; oldNext.textContent='下一步 →'; }
+  }
+
+  if(lock && lock.locked){
+    svShowLockScreen(lock);
+  } else {
+    svStartForm();
+  }
+}
+
+function svShowLockScreen(lock){
+  const reasonEl=document.getElementById('lockReason');
+  const progEl=document.getElementById('lockProgress');
+  if(reasonEl){
+    reasonEl.innerHTML='⚠️ '+(lock.reason||'本輪測評已鎖定');
+  }
+  if(progEl){
+    const myLabel=svRole==='parent'?'家長':'學生';
+    progEl.innerHTML=
+      '<div style="display:flex;justify-content:center;gap:30px;margin-top:8px">'+
+        '<div><div style="font-size:11px;color:#888">'+myLabel+'（您）</div><div style="font-size:24px;font-weight:900;color:#1251A3">'+(lock.myCount||0)+' 次</div></div>'+
+        '<div style="font-size:24px;align-self:center;color:#bbb">vs</div>'+
+        '<div><div style="font-size:11px;color:#888">'+(lock.otherRoleLabel||'對方')+'</div><div style="font-size:24px;font-weight:900;color:#D32F2F">'+(lock.otherCount||0)+' 次</div></div>'+
+      '</div>'+
+      '<div style="margin-top:12px;padding:8px 12px;background:#E8F5E9;border-radius:6px;color:#2E7D32;font-size:12px">'+
+        '✅ 雙方完成同輪次後，才能進行下一次測評（避免交叉分析失準）'+
+      '</div>';
+  }
+  // 隱藏其他 sv-screen，只顯示 sLock
+  document.querySelectorAll('.sv-screen').forEach(s=>s.classList.remove('on'));
+  document.getElementById('sLock').classList.add('on');
+  document.getElementById('progWrap').style.display='none';
+  document.getElementById('stepNav').classList.remove('on');
 }
 function svStartForm(){
   svCurStep=0;svAnswers={};
@@ -1168,22 +1249,37 @@ async function svRefreshSuccessActions(){
   }
 
   if(status.isComplete){
-    if(subEl) subEl.innerHTML = '感謝您的填寫，雙方測評均已完成。<br>您可以立即領取個人測評報告。';
+    const roundN = status.parentCount || 1;   // QM 用 parentCount，雙方匹配時等於該輪次
+    if(subEl) subEl.innerHTML = '感謝您的填寫，雙方第 '+roundN+' 次測評均已完成。<br>您可以立即領取個人測評報告。';
     actions.innerHTML = `
       <button class="btn btn-primary btn-${svCls}" onclick="svOpenReport(this)" style="font-size:16px;padding:14px 28px">🎁 一鍵領取測評報告</button>
       <button class="btn btn-sec" onclick="svResetAll()">填寫另一份</button>
     `;
   }else{
-    // 還缺哪一方
-    const missingRole = status.student ? 'parent' : 'student';
-    const missingLabel = missingRole === 'parent' ? '家長' : '學生本人';
+    // 透過次數判斷誰還沒跟上：count 較少的那方就是要補的
+    const sCnt = status.studentCount || 0;
+    const pCnt = status.parentCount  || 0;
+    let missingRole, missingLabel;
+    if(svCls === 'qm'){
+      missingRole = 'parent'; missingLabel = '家長';
+    } else if(sCnt < pCnt){
+      missingRole = 'student'; missingLabel = '學生本人';
+    } else if(pCnt < sCnt){
+      missingRole = 'parent';  missingLabel = '家長';
+    } else {
+      // 兩邊都 0（不太會發生，但保險）
+      missingRole = svRole === 'parent' ? 'student' : 'parent';
+      missingLabel = missingRole === 'parent' ? '家長' : '學生本人';
+    }
+    const currentRound = Math.max(sCnt, pCnt);
     if(subEl) subEl.innerHTML = '感謝您的填寫，本次測評紀錄已儲存。';
     actions.innerHTML = `
       <div style="background:#FFF3E0;border:2px solid #FFCC80;border-radius:12px;padding:16px;color:#E65100;font-size:14px;line-height:1.7;text-align:left;max-width:420px;margin:0 auto">
-        <div style="font-weight:700;margin-bottom:6px;font-size:15px">⏳ 尚未完成雙方測評</div>
-        目前還需要 <strong>${missingLabel}</strong> 完成測評，<br>
-        雙方都填寫完成後才能領取完整測評報告（含交叉分析）。<br>
-        <span style="font-size:12px;opacity:.85">完成後請回到此頁面，或讓另一位家庭成員填寫該角色版本。</span>
+        <div style="font-weight:700;margin-bottom:6px;font-size:15px">⏳ 尚未完成本輪雙方測評</div>
+        目前學生 <strong>${sCnt}</strong> 次／家長 <strong>${pCnt}</strong> 次，
+        還需要 <strong>${missingLabel}</strong> 完成第 ${currentRound} 次測評，<br>
+        雙方匹配後才能領取完整測評報告（含交叉分析）。<br>
+        <span style="font-size:12px;opacity:.85">完成後請回到此頁面，或讓另一位家庭成員以該角色版本填寫。</span>
       </div>
       <button class="btn btn-sec" onclick="svResetAll()" style="margin-top:12px">填寫另一份</button>
     `;
