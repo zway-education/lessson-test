@@ -144,9 +144,11 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
 .pg-hero p{font-size:12px;color:#888;margin-top:6px}
 .role-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}
 .role-card{border-radius:14px;padding:20px;text-align:center;cursor:pointer;
-  border:2px solid #e0e0e0;background:#fff;transition:all .2s}
+  border:2px solid #e0e0e0;background:#fff;transition:all .2s;position:relative}
 .role-card.student:hover,.role-card.student.sel{border-color:#1251A3;background:#EEF3FF}
 .role-card.parent:hover,.role-card.parent.sel{border-color:#FF8C00;background:#FFF8EE}
+.role-card.locked{cursor:not-allowed;opacity:0.55;background:#f5f5f5;border-color:#ccc}
+.role-card.locked:hover{border-color:#ccc;background:#f5f5f5}
 .role-icon{font-size:30px;margin-bottom:6px}
 .role-name{font-size:13px;font-weight:700}
 .role-hint{font-size:10px;color:#888;margin-top:3px}
@@ -598,16 +600,20 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
         <h1>請選擇填寫身份</h1>
         <p>選擇身份後將顯示對應版本的題目</p>
       </div>
+      <!-- 鎖定狀態說明（一開始就告知） -->
+      <div id="roleLockBanner" style="display:none;max-width:560px;margin:0 auto 14px;padding:14px 18px;border-radius:12px;font-size:13px;line-height:1.7"></div>
       <div class="role-grid">
-        <div class="role-card student" onclick="svSelectRole('student')">
+        <div class="role-card student" id="roleCard_student" onclick="svSelectRole('student')">
           <div class="role-icon" data-role="student">S</div>
           <div class="role-name">學生自填</div>
-          <div class="role-hint">由學生本人作答</div>
+          <div class="role-hint" id="roleHint_student">由學生本人作答</div>
+          <div class="role-lock-badge" id="roleLock_student" style="display:none;position:absolute;top:8px;right:8px;background:#D32F2F;color:#fff;border-radius:12px;padding:3px 10px;font-size:11px;font-weight:700">🔒 鎖定</div>
         </div>
-        <div class="role-card parent" onclick="svSelectRole('parent')">
+        <div class="role-card parent" id="roleCard_parent" onclick="svSelectRole('parent')">
           <div class="role-icon" data-role="parent">P</div>
           <div class="role-name">家長填寫</div>
-          <div class="role-hint">由家長評估孩子</div>
+          <div class="role-hint" id="roleHint_parent">由家長評估孩子</div>
+          <div class="role-lock-badge" id="roleLock_parent" style="display:none;position:absolute;top:8px;right:8px;background:#D32F2F;color:#fff;border-radius:12px;padding:3px 10px;font-size:11px;font-weight:700">🔒 鎖定</div>
         </div>
       </div>
     </div>
@@ -894,7 +900,91 @@ async function svProceedFromVerify(){
     const nb=document.getElementById('roleNextBtn');
     nb.className='btn btn-primary btn-'+clsVal;
     document.querySelectorAll('.role-card').forEach(rc=>rc.classList.remove('sel'));
-    svRole='';nb.disabled=true;svGoScreen(1);
+    svRole='';nb.disabled=true;
+    // 預先抓雙方次數，在角色選擇頁就告知鎖定狀態
+    await svPrepareRoleLockUI();
+    svGoScreen(1);
+  }
+}
+
+/* 在進入角色選擇頁前，先抓雙方次數，標示鎖定的角色卡片 */
+async function svPrepareRoleLockUI(){
+  // 重置卡片狀態
+  ['student','parent'].forEach(r=>{
+    const card=document.getElementById('roleCard_'+r);
+    const lock=document.getElementById('roleLock_'+r);
+    const hint=document.getElementById('roleHint_'+r);
+    if(card){ card.classList.remove('locked'); card.dataset.locked=''; card.dataset.lockMsg=''; }
+    if(lock) lock.style.display='none';
+    if(hint) hint.textContent = (r==='student'?'由學生本人作答':'由家長評估孩子');
+  });
+  const banner=document.getElementById('roleLockBanner');
+  if(banner){ banner.style.display='none'; banner.innerHTML=''; }
+
+  // dev 模式跳過後端檢查
+  if(ZW.isDevMode) return;
+
+  let counts={student:0,parent:0};
+  try{
+    const url=SV_URL+'?action=checkBothRoles&name='+encodeURIComponent(svInfo.name)+'&class='+encodeURIComponent(svCls);
+    const res=await fetch(url);
+    const json=await res.json();
+    if(json.status==='ok'){
+      counts.student = json.studentCount||0;
+      counts.parent  = json.parentCount ||0;
+    }
+  }catch(e){ console.warn('checkBothRoles 失敗', e); return; }
+
+  const sCnt=counts.student, pCnt=counts.parent;
+
+  // 更新提示文字（顯示已完成次數）
+  document.getElementById('roleHint_student').textContent =
+    sCnt>0 ? '已完成 '+sCnt+' 次' : '由學生本人作答';
+  document.getElementById('roleHint_parent').textContent =
+    pCnt>0 ? '已完成 '+pCnt+' 次' : '由家長評估孩子';
+
+  // 判斷誰要鎖
+  function lockRole(role, msg){
+    const card=document.getElementById('roleCard_'+role);
+    const lock=document.getElementById('roleLock_'+role);
+    if(card){ card.classList.add('locked'); card.dataset.locked='1'; card.dataset.lockMsg=msg; }
+    if(lock) lock.style.display='inline-block';
+  }
+
+  if(sCnt > pCnt){
+    // 學生超前：學生鎖定
+    const ahead='student', behind='parent';
+    const aheadLabel='學生本人', behindLabel='家長';
+    lockRole(ahead,
+      '您（'+aheadLabel+'）已完成第 '+sCnt+' 次填寫，請提醒'+behindLabel+'完成測評獲得數據（雙方完成同輪後才能進行下一次）'
+    );
+    if(banner){
+      banner.style.display='block';
+      banner.style.cssText='display:block;max-width:560px;margin:0 auto 14px;padding:14px 18px;border-radius:12px;font-size:13px;line-height:1.7;background:#FFF3E0;border:2px solid #FFCC80;color:#E65100';
+      banner.innerHTML='⚠️ <strong>學生已完成第 '+sCnt+' 次測評，等候家長補上同輪次資料</strong><br>'+
+        '目前學生 '+sCnt+' 次／家長 '+pCnt+' 次，請家長使用「家長填寫」完成第 '+sCnt+' 次測評。'+
+        '雙方完成同輪後才能進行下一輪。';
+    }
+  } else if(pCnt > sCnt){
+    // 家長超前：家長鎖定
+    lockRole('parent',
+      '您（家長）已完成第 '+pCnt+' 次填寫，請提醒學生完成測評獲得數據（雙方完成同輪後才能進行下一次）'
+    );
+    if(banner){
+      banner.style.display='block';
+      banner.style.cssText='display:block;max-width:560px;margin:0 auto 14px;padding:14px 18px;border-radius:12px;font-size:13px;line-height:1.7;background:#FFF3E0;border:2px solid #FFCC80;color:#E65100';
+      banner.innerHTML='⚠️ <strong>家長已完成第 '+pCnt+' 次測評，等候學生補上同輪次資料</strong><br>'+
+        '目前家長 '+pCnt+' 次／學生 '+sCnt+' 次，請學生使用「學生自填」完成第 '+pCnt+' 次測評。'+
+        '雙方完成同輪後才能進行下一輪。';
+    }
+  } else if(sCnt===pCnt && sCnt>0){
+    // 雙方匹配：通知這是新的一輪
+    if(banner){
+      banner.style.display='block';
+      banner.style.cssText='display:block;max-width:560px;margin:0 auto 14px;padding:14px 18px;border-radius:12px;font-size:13px;line-height:1.7;background:#E8F5E9;border:2px solid #A5D6A7;color:#1B5E20';
+      banner.innerHTML='✅ <strong>第 '+sCnt+' 輪雙方測評均已完成</strong><br>'+
+        '若要進行第 '+(sCnt+1)+' 次測評，請學生與家長都選擇對應身分填寫。';
+    }
   }
 }
 
@@ -918,6 +1008,13 @@ function svSelectClass(c){
   }
 }
 function svSelectRole(r){
+  // 鎖定的角色：禁止選擇 + 顯示「您已完成填寫，請提醒...」訊息
+  const card=document.getElementById('roleCard_'+r);
+  if(card && card.dataset.locked==='1'){
+    const msg=card.dataset.lockMsg || '您已完成填寫，請提醒家長/孩子完成測評獲得數據。';
+    alert('🔒 此角色已鎖定\n\n'+msg);
+    return;
+  }
   svRole=r;
   document.querySelectorAll('.role-card').forEach(rc=>rc.classList.remove('sel'));
   document.querySelector('.role-card.'+r).classList.add('sel');
