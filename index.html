@@ -498,7 +498,7 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
 </head>
 <body>
 <!-- 版本徽章（右下角固定） -->
-<div id="versionBadge" style="position:fixed;bottom:8px;right:10px;z-index:9999;font-family:monospace;font-size:10px;color:#999;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:10px;border:1px solid #e0e0e0;box-shadow:0 1px 4px rgba(0,0,0,.06);pointer-events:none">v1.09</div>
+<div id="versionBadge" style="position:fixed;bottom:8px;right:10px;z-index:9999;font-family:monospace;font-size:10px;color:#999;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:10px;border:1px solid #e0e0e0;box-shadow:0 1px 4px rgba(0,0,0,.06);pointer-events:none">v1.10</div>
 <!-- ══ Global Nav ══════════════════════════════════════════════ -->
 <nav class="g-nav">
   <div class="g-logo">台灣展威文化教育<small>TAIWAN ZHANWEI EDUCATION</small></div>
@@ -837,6 +837,27 @@ async function svDoLookup(){
     const json=await res.json();
     if(json.status==='ok'&&json.found){
       svVerifiedRecord={...json,nextAssessment:(json.assessment_count||0)+1};
+
+      // ★ 容錯：若 verify 沒回傳 studentCount/parentCount（後端舊版未含此欄），
+      //   再單獨呼叫 checkBothRoles 補拿真正次數，確保畫面顯示正確
+      if(svVerifiedRecord.studentCount === undefined || svVerifiedRecord.parentCount === undefined){
+        try{
+          const r2=await fetch(`${SV_URL}?action=checkBothRoles&name=${encodeURIComponent(name)}&class=${clsVal}`);
+          const j2=await r2.json();
+          if(j2.status==='ok'){
+            svVerifiedRecord.studentCount = j2.studentCount||0;
+            svVerifiedRecord.parentCount  = j2.parentCount ||0;
+            svVerifiedRecord._countSource = 'checkBothRoles fallback';
+          } else {
+            svVerifiedRecord._countSource = 'unavailable (Apps Script 後端版本過舊，請重新部署)';
+          }
+        }catch(e){
+          svVerifiedRecord._countSource = '無法連線';
+        }
+      } else {
+        svVerifiedRecord._countSource = 'verify';
+      }
+
       svShowVResult('found',svVerifiedRecord);
     } else if(json.status==='error'){
       svVerifiedRecord=null; svShowVResult('warn','API 錯誤：'+json.message);
@@ -871,6 +892,11 @@ function svShowVResult(type,data){
       roleStatusHtml = _statusLine('家長', pCount, '#FF8C00');
     } else {
       roleStatusHtml = _statusLine('學生', sCount, '#1B6E35') + _statusLine('家長', pCount, '#1251A3');
+    }
+
+    // 資料來源診斷（讓您知道資料是不是真的拉到了）
+    if(data._countSource && data._countSource.indexOf('過舊') >= 0){
+      roleStatusHtml += `<div style="margin-top:6px;padding:6px 8px;background:#FFEBEE;border-left:3px solid #D32F2F;font-size:11px;color:#C62828;text-align:left;line-height:1.5">⚠️ ${data._countSource}</div>`;
     }
 
     el.innerHTML=`<div class="v-found">
