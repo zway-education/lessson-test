@@ -498,7 +498,7 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
 </head>
 <body>
 <!-- 版本徽章（右下角固定） -->
-<div id="versionBadge" style="position:fixed;bottom:8px;right:10px;z-index:9999;font-family:monospace;font-size:10px;color:#999;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:10px;border:1px solid #e0e0e0;box-shadow:0 1px 4px rgba(0,0,0,.06);pointer-events:none">v1.15</div>
+<div id="versionBadge" style="position:fixed;bottom:8px;right:10px;z-index:9999;font-family:monospace;font-size:10px;color:#999;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:10px;border:1px solid #e0e0e0;box-shadow:0 1px 4px rgba(0,0,0,.06);pointer-events:none">v1.16</div>
 <!-- ══ Global Nav ══════════════════════════════════════════════ -->
 <nav class="g-nav">
   <div class="g-logo">台灣展威文化教育<small>TAIWAN ZHANWEI EDUCATION</small></div>
@@ -1350,15 +1350,50 @@ function svRenderConfirm(){
 // 模組層級狀態（避免重複送出 / 提供重試）
 let _svSubmitting = false;
 let _svLastPayload = null;
+let _svElapsedTimer = null;
+
+// 完成送出後跳到成功頁的共用流程
+function _svFinishSubmit(record){
+  try{ localStorage.setItem('report_record', JSON.stringify(record)); }catch(e){}
+  try{ localStorage.removeItem('svDraft_'+svQKey); }catch(e){}
+  // 清理畫面提示
+  ['svSubmitErr','svFastSubmit'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.remove();
+  });
+  if(_svElapsedTimer){ clearInterval(_svElapsedTimer); _svElapsedTimer=null; }
+  svRenderPostReport(record);
+  svGoScreen(4);
+  svRefreshSuccessActions();
+  _svLastPayload = null;
+  _svSubmitting = false;
+}
+
+// 「立即查看結果」按鈕：使用者主動跳過等待，背景送出 + 直接到成功頁
+function svFastSubmitNow(){
+  if(!_svLastPayload) return;
+  try{
+    fetch(SV_URL+'?action=saveResponse',{
+      method:'POST',
+      body:JSON.stringify(_svLastPayload),
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      mode:'no-cors',
+      keepalive:true
+    }).catch(()=>{});
+  }catch(e){}
+  console.warn('User chose fast-submit path (no-cors)');
+  _svFinishSubmit(_svLastPayload.record);
+}
 
 async function svDoSubmit(retry){
   if(_svSubmitting) return;
   _svSubmitting = true;
   const btn=document.getElementById('submitBtn');
-  btn.disabled=true;btn.textContent='送出中（最多 50 秒）…';
-  // 移除上次的錯誤橫幅（如果有）
-  const oldErr = document.getElementById('svSubmitErr');
-  if(oldErr) oldErr.remove();
+  btn.disabled=true;btn.textContent='送出中…';
+  // 移除上次的錯誤橫幅 / 快速送出按鈕（如果有）
+  ['svSubmitErr','svFastSubmit'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.remove();
+  });
 
   // 產生台灣時間（Asia/Taipei, UTC+8），格式 YYYY-MM-DD HH:mm:ss
   const _twNow = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Taipei', hour12: false });
@@ -1376,17 +1411,39 @@ async function svDoSubmit(retry){
     }
   };
   _svLastPayload = payload;
-  // 暫存到 localStorage，萬一斷線/重整可恢復
   try{ localStorage.setItem('lastSubmitRecord', JSON.stringify(payload.record)); }catch(e){}
+
+  // 即時計時器：每秒更新「已等待 N 秒」+ 8 秒後顯示「立即查看結果」按鈕
+  const startTime = Date.now();
+  if(_svElapsedTimer){ clearInterval(_svElapsedTimer); }
+  _svElapsedTimer = setInterval(()=>{
+    if(!_svSubmitting){ clearInterval(_svElapsedTimer); _svElapsedTimer=null; return; }
+    const sec = Math.floor((Date.now()-startTime)/1000);
+    btn.textContent = `送出中… ${sec} 秒`;
+    // 8 秒後顯示快速送出按鈕
+    if(sec >= 8 && !document.getElementById('svFastSubmit')){
+      const container = document.getElementById('confirmContent') || document.querySelector('#s3 .sv-cont');
+      if(container){
+        const fast = document.createElement('div');
+        fast.id = 'svFastSubmit';
+        fast.style.cssText = 'margin-top:14px;padding:14px 16px;background:linear-gradient(135deg,#FFF8E1,#FFECB3);border:2px solid #FFB300;border-radius:12px;text-align:center';
+        fast.innerHTML =
+          '<div style="font-size:13px;color:#E65100;font-weight:700;margin-bottom:6px">⏱ 後台回應較慢（資料已安全暫存）</div>'+
+          '<div style="font-size:12px;color:#666;line-height:1.6;margin-bottom:10px">您可以選擇繼續等候，<br>或立即跳到結果頁（系統會在背景完成送出）</div>'+
+          '<button onclick="svFastSubmitNow()" style="background:linear-gradient(135deg,#FFB300,#FF8F00);color:#fff;border:none;padding:10px 22px;border-radius:8px;font-weight:700;font-family:inherit;cursor:pointer;font-size:14px;box-shadow:0 2px 8px rgba(255,143,0,.3)">⚡ 立即查看結果</button>';
+        container.appendChild(fast);
+      }
+    }
+  }, 1000);
 
   try{
     if(ZW.isDevMode){
       console.log('[Dev] Payload:',payload.record);
       await new Promise(r=>setTimeout(r,800));
     } else {
-      // ★ timeout 從 25 秒拉長到 50 秒，適應 Apps Script 冷啟動
+      // ★ timeout 縮短到 15 秒：超時就自動切換成背景送出（無感體驗）
       const ctrl=new AbortController();
-      const tid=setTimeout(()=>ctrl.abort(), 50000);
+      const tid=setTimeout(()=>ctrl.abort(), 15000);
       let networkOk=false;
       try{
         const res=await fetch(SV_URL+'?action=saveResponse',{
@@ -1402,7 +1459,7 @@ async function svDoSubmit(retry){
         else throw new Error(json.message||'後台未回 ok');
       }catch(err){
         clearTimeout(tid);
-        // Timeout 或網路問題：fire-and-forget 補送（不等回應）
+        // 超時或網路問題：背景補送（不等回應），直接視為成功進入結果頁
         if(err.name==='AbortError' || /timeout|fetch|Failed|NetworkError/i.test(err.message)){
           try{
             fetch(SV_URL+'?action=saveResponse',{
@@ -1412,23 +1469,18 @@ async function svDoSubmit(retry){
               mode:'no-cors',
               keepalive:true
             }).catch(()=>{});
-            console.warn('Submit timeout, retrying as fire-and-forget. Backup in localStorage.lastSubmitRecord');
+            console.warn('Submit timeout (15s)，自動切換為背景送出。Backup at localStorage.lastSubmitRecord');
             networkOk=true;
           }catch(e){}
         }
         if(!networkOk) throw err;
       }
     }
-    try{ localStorage.setItem('report_record', JSON.stringify(payload.record)); }catch(e){}
-    // ★ 送出成功後清掉草稿，避免下次又問是否繼續
-    try{ localStorage.removeItem('svDraft_'+svQKey); }catch(e){}
-    svRenderPostReport(payload.record);
-    svGoScreen(4);
-    svRefreshSuccessActions();
-    _svLastPayload = null;   // 成功後清掉 payload
+    _svFinishSubmit(payload.record);
   }catch(e){
-    const msg=(e.name==='AbortError') ? '伺服器回應太慢，請點下方「重試送出」' : e.message;
-    // 顯示行內錯誤橫幅 + 重試按鈕（不用 confirm 對話框）
+    if(_svElapsedTimer){ clearInterval(_svElapsedTimer); _svElapsedTimer=null; }
+    const msg=(e.name==='AbortError') ? '伺服器回應太慢' : e.message;
+    // 顯示行內錯誤橫幅 + 重試按鈕
     const container = document.getElementById('confirmContent') || document.querySelector('#s3 .sv-cont');
     if(container){
       const errBar = document.createElement('div');
@@ -1439,14 +1491,12 @@ async function svDoSubmit(retry){
         '<div style="margin-bottom:10px">'+msg+'</div>'+
         '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
           '<button onclick="svDoSubmit(true)" style="background:#D32F2F;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-weight:700;font-family:inherit;cursor:pointer">🔄 立即重試送出</button>'+
-          '<button onclick="svGoScreen(4);svRenderPostReport(JSON.parse(localStorage.getItem(\'lastSubmitRecord\')||\'{}\'));svRefreshSuccessActions();" style="background:#fff;color:#666;border:1px solid #ccc;padding:8px 16px;border-radius:6px;font-family:inherit;cursor:pointer">先看結果（資料已暫存於本機）</button>'+
+          '<button onclick="svFastSubmitNow()" style="background:#FFB300;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-weight:700;font-family:inherit;cursor:pointer">⚡ 改用背景送出</button>'+
         '</div>'+
         '<div style="margin-top:8px;font-size:11px;color:#888">資料已存於 localStorage.lastSubmitRecord，刷新頁面也不會丟失</div>';
       container.appendChild(errBar);
     }
-    // 復原按鈕讓使用者可以再試
     btn.disabled=false;btn.textContent='確認送出';
-  } finally {
     _svSubmitting = false;
   }
 }
