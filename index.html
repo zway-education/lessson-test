@@ -498,7 +498,7 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
 </head>
 <body>
 <!-- 版本徽章（右下角固定） -->
-<div id="versionBadge" style="position:fixed;bottom:8px;right:10px;z-index:9999;font-family:monospace;font-size:10px;color:#999;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:10px;border:1px solid #e0e0e0;box-shadow:0 1px 4px rgba(0,0,0,.06);pointer-events:none">v1.13</div>
+<div id="versionBadge" style="position:fixed;bottom:8px;right:10px;z-index:9999;font-family:monospace;font-size:10px;color:#999;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:10px;border:1px solid #e0e0e0;box-shadow:0 1px 4px rgba(0,0,0,.06);pointer-events:none">v1.15</div>
 <!-- ══ Global Nav ══════════════════════════════════════════════ -->
 <nav class="g-nav">
   <div class="g-logo">台灣展威文化教育<small>TAIWAN ZHANWEI EDUCATION</small></div>
@@ -1168,6 +1168,21 @@ function svShowLockScreen(lock){
 }
 function svStartForm(){
   svCurStep=0;svAnswers={};
+  // ★ 還原草稿（如果有）
+  try{
+    const raw = localStorage.getItem('svDraft_'+svQKey);
+    if(raw){
+      const draft = JSON.parse(raw);
+      const answeredCount = Object.keys(draft.answers||{}).length;
+      if(answeredCount > 0 && confirm(`偵測到上次未送出的草稿（已答 ${answeredCount} 題）\n\n是否從上次中斷處繼續？\n（按取消則重新開始）`)){
+        svAnswers = draft.answers || {};
+        if(draft.info){ Object.assign(svInfo, draft.info); }
+      } else {
+        // 不繼續就清掉
+        localStorage.removeItem('svDraft_'+svQKey);
+      }
+    }
+  }catch(e){ console.warn('草稿還原失敗', e); }
   document.getElementById('progWrap').style.display='';
   svUpdateProgress();svRenderStep();svGoScreen(2);
 }
@@ -1280,6 +1295,17 @@ function svRenderQuestions(c,step,color){
 function svSetScore(key,val,btn){
   svAnswers[key]=val;
   document.querySelectorAll(`[data-key="${key}"]`).forEach(b=>b.classList.toggle('active',parseInt(b.dataset.val)===val));
+  // ★ 自動儲存草稿（防止刷新或斷線資料遺失）
+  svAutoSaveDraft();
+}
+
+// 自動草稿：每次答題即時寫入 localStorage
+function svAutoSaveDraft(){
+  if(!svQKey || !svInfo || !svInfo.name) return;
+  try{
+    const draft = { qKey: svQKey, info: svInfo, answers: svAnswers, savedAt: new Date().toISOString() };
+    localStorage.setItem('svDraft_'+svQKey, JSON.stringify(draft));
+  }catch(e){}
 }
 function svNextStep(){
   if(svSteps[svCurStep].type==='info'){
@@ -1321,31 +1347,46 @@ function svRenderConfirm(){
     各維度作答內容已自動儲存，請確認上方基本資料無誤後送出
   </div>`;
 }
-async function svDoSubmit(){
+// 模組層級狀態（避免重複送出 / 提供重試）
+let _svSubmitting = false;
+let _svLastPayload = null;
+
+async function svDoSubmit(retry){
+  if(_svSubmitting) return;
+  _svSubmitting = true;
   const btn=document.getElementById('submitBtn');
-  btn.disabled=true;btn.textContent='送出中…';
+  btn.disabled=true;btn.textContent='送出中（最多 50 秒）…';
+  // 移除上次的錯誤橫幅（如果有）
+  const oldErr = document.getElementById('svSubmitErr');
+  if(oldErr) oldErr.remove();
+
   // 產生台灣時間（Asia/Taipei, UTC+8），格式 YYYY-MM-DD HH:mm:ss
-  // 不再使用 toISOString()（那是 UTC 會比台灣慢 8 小時）
   const _twNow = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Taipei', hour12: false });
-  const payload={action:'saveResponse',record:{
-    _id:'sv_'+Date.now(),
-    timestamp: _twNow,
-    class:svCls,role:svRole,qKey:svQKey,
-    name:svInfo.name,class_name:svInfo.grade,eval_date:svInfo.date,fill_date:svInfo.filldate,
-    school:svInfo.school,ename:svInfo.ename,prel:svInfo.prel,
-    parent_name:svInfo.pname,phone:svInfo.phone,email:svInfo.email,
-    ...svAnswers
-  }};
-  // 先暫存到 localStorage，萬一網路斷可恢復
+  // 重試時用同一份 payload，避免 _id 跟 timestamp 改變造成 sheet 重複紀錄
+  const payload = (retry && _svLastPayload) ? _svLastPayload : {
+    action:'saveResponse',
+    record:{
+      _id:'sv_'+Date.now(),
+      timestamp: _twNow,
+      class:svCls,role:svRole,qKey:svQKey,
+      name:svInfo.name,class_name:svInfo.grade,eval_date:svInfo.date,fill_date:svInfo.filldate,
+      school:svInfo.school,ename:svInfo.ename,prel:svInfo.prel,
+      parent_name:svInfo.pname,phone:svInfo.phone,email:svInfo.email,
+      ...svAnswers
+    }
+  };
+  _svLastPayload = payload;
+  // 暫存到 localStorage，萬一斷線/重整可恢復
   try{ localStorage.setItem('lastSubmitRecord', JSON.stringify(payload.record)); }catch(e){}
+
   try{
     if(ZW.isDevMode){
       console.log('[Dev] Payload:',payload.record);
       await new Promise(r=>setTimeout(r,800));
     } else {
-      // 25 秒 timeout 避免 Apps Script 冷啟動把使用者卡住
+      // ★ timeout 從 25 秒拉長到 50 秒，適應 Apps Script 冷啟動
       const ctrl=new AbortController();
-      const tid=setTimeout(()=>ctrl.abort(), 25000);
+      const tid=setTimeout(()=>ctrl.abort(), 50000);
       let networkOk=false;
       try{
         const res=await fetch(SV_URL+'?action=saveResponse',{
@@ -1362,7 +1403,7 @@ async function svDoSubmit(){
       }catch(err){
         clearTimeout(tid);
         // Timeout 或網路問題：fire-and-forget 補送（不等回應）
-        if(err.name==='AbortError' || /timeout|fetch|Failed/i.test(err.message)){
+        if(err.name==='AbortError' || /timeout|fetch|Failed|NetworkError/i.test(err.message)){
           try{
             fetch(SV_URL+'?action=saveResponse',{
               method:'POST',
@@ -1379,19 +1420,34 @@ async function svDoSubmit(){
       }
     }
     try{ localStorage.setItem('report_record', JSON.stringify(payload.record)); }catch(e){}
+    // ★ 送出成功後清掉草稿，避免下次又問是否繼續
+    try{ localStorage.removeItem('svDraft_'+svQKey); }catch(e){}
     svRenderPostReport(payload.record);
     svGoScreen(4);
-    svRefreshSuccessActions();      // 動態渲染按鈕：依雙方完成狀態決定顯示
+    svRefreshSuccessActions();
+    _svLastPayload = null;   // 成功後清掉 payload
   }catch(e){
-    const msg=(e.name==='AbortError') ? '伺服器回應太慢' : e.message;
-    if(confirm('送出失敗：'+msg+'\n\n是否仍要顯示測評結果？\n（資料已存在裝置上，可下次重試送出）')){
-      try{ localStorage.setItem('report_record', JSON.stringify(payload.record)); }catch(e){}
-      svRenderPostReport(payload.record);
-      svGoScreen(4);
-      svRefreshSuccessActions();
-    } else {
-      btn.disabled=false;btn.textContent='確認送出';
+    const msg=(e.name==='AbortError') ? '伺服器回應太慢，請點下方「重試送出」' : e.message;
+    // 顯示行內錯誤橫幅 + 重試按鈕（不用 confirm 對話框）
+    const container = document.getElementById('confirmContent') || document.querySelector('#s3 .sv-cont');
+    if(container){
+      const errBar = document.createElement('div');
+      errBar.id = 'svSubmitErr';
+      errBar.style.cssText = 'margin-top:14px;padding:14px 16px;background:#FFEBEE;border:2px solid #EF9A9A;border-radius:12px;color:#C62828;font-size:13px;line-height:1.6';
+      errBar.innerHTML =
+        '<div style="font-weight:700;margin-bottom:6px">⚠️ 送出失敗</div>'+
+        '<div style="margin-bottom:10px">'+msg+'</div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+          '<button onclick="svDoSubmit(true)" style="background:#D32F2F;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-weight:700;font-family:inherit;cursor:pointer">🔄 立即重試送出</button>'+
+          '<button onclick="svGoScreen(4);svRenderPostReport(JSON.parse(localStorage.getItem(\'lastSubmitRecord\')||\'{}\'));svRefreshSuccessActions();" style="background:#fff;color:#666;border:1px solid #ccc;padding:8px 16px;border-radius:6px;font-family:inherit;cursor:pointer">先看結果（資料已暫存於本機）</button>'+
+        '</div>'+
+        '<div style="margin-top:8px;font-size:11px;color:#888">資料已存於 localStorage.lastSubmitRecord，刷新頁面也不會丟失</div>';
+      container.appendChild(errBar);
     }
+    // 復原按鈕讓使用者可以再試
+    btn.disabled=false;btn.textContent='確認送出';
+  } finally {
+    _svSubmitting = false;
   }
 }
 
