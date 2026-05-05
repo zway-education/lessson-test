@@ -498,7 +498,7 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
 </head>
 <body>
 <!-- 版本徽章（右下角固定） -->
-<div id="versionBadge" style="position:fixed;bottom:8px;right:10px;z-index:9999;font-family:monospace;font-size:10px;color:#999;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:10px;border:1px solid #e0e0e0;box-shadow:0 1px 4px rgba(0,0,0,.06);pointer-events:none">v1.07</div>
+<div id="versionBadge" style="position:fixed;bottom:8px;right:10px;z-index:9999;font-family:monospace;font-size:10px;color:#999;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:10px;border:1px solid #e0e0e0;box-shadow:0 1px 4px rgba(0,0,0,.06);pointer-events:none">v1.09</div>
 <!-- ══ Global Nav ══════════════════════════════════════════════ -->
 <nav class="g-nav">
   <div class="g-logo">台灣展威文化教育<small>TAIWAN ZHANWEI EDUCATION</small></div>
@@ -827,7 +827,8 @@ async function svDoLookup(){
   if(ZW.isDevMode){
     await new Promise(r=>setTimeout(r,600));
     svVerifiedRecord={name,class:clsVal,class_name:'（示範班級）',level:'Level 1',
-      parent_name:'',phone:'',email:'',assessment_count:0,nextAssessment:1};
+      parent_name:'',phone:'',email:'',assessment_count:0,nextAssessment:1,
+      studentCount:0,parentCount:0};
     svShowVResult('found',svVerifiedRecord);
     btn.disabled=false;btn.innerHTML='<span>查詢學員資料</span>';return;
   }
@@ -852,7 +853,26 @@ function svShowVResult(type,data){
     const color=CLS_COLORS[data.class]||'#555';
     const bg=CLS_BG[data.class]||'#f5f5f5';
     const nth=data.nextAssessment||1;
-    const nthLabel=['第一','第二','第三','第四','第五','第六','第七','第八'][nth-1]||(nth+'');
+    const NTH=['第一','第二','第三','第四','第五','第六','第七','第八'];
+    const nthLabel=NTH[nth-1]||(nth+'');
+
+    // ── 雙方狀態（從 Google Sheet 統計） ─────────────
+    const sCount = Number(data.studentCount||0);
+    const pCount = Number(data.parentCount ||0);
+    function _statusLine(roleLabel, count, accent){
+      const txt = count > 0
+        ? `<span style="color:${accent};font-weight:700">完成第${NTH[count-1]||count}次測評</span>`
+        : `<span style="color:#999">尚未進行測評</span>`;
+      return `<div style="font-size:12px;line-height:1.7"><strong style="color:#444">${roleLabel}</strong>　- ${txt}</div>`;
+    }
+    let roleStatusHtml;
+    if(data.class === 'qm'){
+      // QM 啟蒙班：只有家長
+      roleStatusHtml = _statusLine('家長', pCount, '#FF8C00');
+    } else {
+      roleStatusHtml = _statusLine('學生', sCount, '#1B6E35') + _statusLine('家長', pCount, '#1251A3');
+    }
+
     el.innerHTML=`<div class="v-found">
       <div class="v-found-title">已找到學員資料</div>
       <div class="v-found-grid">
@@ -864,7 +884,11 @@ function svShowVResult(type,data){
           <div class="v-found-cell-val" style="color:${color}">${data.level}</div></div>`:''}
         <div class="v-found-cell" style="background:${bg}">
           <div class="v-found-cell-label" style="color:${color}">測評次數</div>
-          <div class="v-found-cell-val" style="color:${color}">${nthLabel}次測評</div></div>
+          <div class="v-found-cell-val" style="color:${color};font-size:15px;margin-bottom:6px">${nthLabel}次測評</div>
+          <div style="border-top:1px dashed ${color}40;padding-top:6px;margin-top:2px">
+            ${roleStatusHtml}
+          </div>
+        </div>
       </div>
       <button class="btn-proceed" style="background:${color}" onclick="svProceedFromVerify()">
         確認，開始填寫問卷 →</button></div>`;
