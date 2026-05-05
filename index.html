@@ -498,7 +498,7 @@ body{font-family:'Noto Sans TC','Microsoft JhengHei',system-ui,sans-serif;backgr
 </head>
 <body>
 <!-- 版本徽章（右下角固定） -->
-<div id="versionBadge" style="position:fixed;bottom:8px;right:10px;z-index:9999;font-family:monospace;font-size:10px;color:#999;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:10px;border:1px solid #e0e0e0;box-shadow:0 1px 4px rgba(0,0,0,.06);pointer-events:none">v1.10</div>
+<div id="versionBadge" style="position:fixed;bottom:8px;right:10px;z-index:9999;font-family:monospace;font-size:10px;color:#999;background:rgba(255,255,255,.85);padding:3px 8px;border-radius:10px;border:1px solid #e0e0e0;box-shadow:0 1px 4px rgba(0,0,0,.06);pointer-events:none">v1.13</div>
 <!-- ══ Global Nav ══════════════════════════════════════════════ -->
 <nav class="g-nav">
   <div class="g-logo">台灣展威文化教育<small>TAIWAN ZHANWEI EDUCATION</small></div>
@@ -873,16 +873,26 @@ function svShowVResult(type,data){
   } else if(type==='found'){
     const color=CLS_COLORS[data.class]||'#555';
     const bg=CLS_BG[data.class]||'#f5f5f5';
-    const nth=data.nextAssessment||1;
     const NTH=['第一','第二','第三','第四','第五','第六','第七','第八'];
-    const nthLabel=NTH[nth-1]||(nth+'');
 
     // ── 雙方狀態（從 Google Sheet 統計） ─────────────
     const sCount = Number(data.studentCount||0);
     const pCount = Number(data.parentCount ||0);
+
+    // ★ 測評次數以「雙方一組已完成的輪次」為基準（QM 只看家長）
+    //   例：學生 1 次 / 家長 2 次 → 完成 1 輪 → 下一次是第二次測評
+    let completedRound;
+    if(data.class === 'qm'){
+      completedRound = pCount;
+    } else {
+      completedRound = Math.min(sCount, pCount);
+    }
+    const nthNext = completedRound + 1;
+    const nthLabel = NTH[nthNext-1] || (nthNext+'');
+
     function _statusLine(roleLabel, count, accent){
       const txt = count > 0
-        ? `<span style="color:${accent};font-weight:700">完成第${NTH[count-1]||count}次測評</span>`
+        ? `<span style="color:${accent};font-weight:700">完成${NTH[count-1]||count}次測評</span>`
         : `<span style="color:#999">尚未進行測評</span>`;
       return `<div style="font-size:12px;line-height:1.7"><strong style="color:#444">${roleLabel}</strong>　- ${txt}</div>`;
     }
